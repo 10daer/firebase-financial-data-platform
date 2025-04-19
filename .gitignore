@@ -1,0 +1,22 @@
+# Compiled JavaScript files
+lib/**/*.js
+lib/**/*.js.map
+
+# TypeScript v1 declaration files
+typings/
+
+# Node.js dependency directory
+node_modules/
+*.local
+
+src/
+
+lib/
+.env
+.runtimeconfig.json
+.firebase/
+*.log
+.firebaserc
+.DS_Store
+yarn-error.log
+*.cache
