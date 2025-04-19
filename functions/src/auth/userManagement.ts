@@ -1,10 +1,13 @@
 import * as admin from "firebase-admin";
+import { initializeApp } from "firebase-admin/app";
+import { FieldValue } from "firebase-admin/firestore";
 import * as functions from "firebase-functions/v1";
 import { logger } from "../utils/logger";
 
-// Initialize Firebase if not already initialized
-if (!admin.apps.length) {
-  admin.initializeApp();
+// Initialize Firebase Admin if not already initialized
+if (!(global as any).firebaseInitialized) {
+  initializeApp();
+  (global as any).firebaseInitialized = true;
 }
 
 /**
@@ -37,7 +40,7 @@ export const createUserProfile = functions.auth
         uid: user.uid,
         email: user.email ?? null,
         displayName: user.displayName || "",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         watchlist: ["AAPL", "MSFT", "GOOGL", "AMZN"], // Default watchlist
         preferences: {
           theme: "light",
@@ -71,7 +74,7 @@ export async function updateUserPreferences(
   try {
     const userRef = admin.firestore().collection("users").doc(userId);
     const updateData: any = {
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
 
     // Only update provided fields
@@ -80,7 +83,7 @@ export async function updateUserPreferences(
     }
 
     if (preferences) {
-      updateData.preferences = admin.firestore.FieldValue.delete();
+      updateData.preferences = FieldValue.delete();
       updateData["preferences"] = preferences;
     }
 
@@ -156,7 +159,7 @@ export const manageWatchlist = functions.https.onCall(async (data, context) => {
     // Update the user profile
     await admin.firestore().collection("users").doc(userId).update({
       watchlist,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     // Also update the user's data with latest market information
@@ -191,7 +194,7 @@ async function updateUserData(
     const userRef = admin.firestore().collection("users").doc(userId);
     await userRef.update({
       marketData,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     logger.info(`Updated market data for user ${userId}`);

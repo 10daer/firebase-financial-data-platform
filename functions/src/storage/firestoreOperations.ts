@@ -1,12 +1,15 @@
-import * as admin from "firebase-admin";
-import {logger} from "../utils/logger";
+import { initializeApp } from "firebase-admin/app";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { logger } from "../utils/logger";
 
-// Initialize Firebase Admin SDK if not already initialized
-if (!admin.apps.length) {
-  admin.initializeApp();
+// Initialize Firebase Admin if not already initialized
+if (!(global as any).firebaseInitialized) {
+  initializeApp();
+  (global as any).firebaseInitialized = true;
 }
 
-const db = admin.firestore();
+const db = getFirestore();
+db.settings({ ignoreUndefinedProperties: true });
 
 /**
  * Stores processed news articles in Firestore
@@ -28,9 +31,9 @@ export async function storeNewsData(newsArticles: any[]): Promise<void> {
       {
         date: today,
         articles: newsArticles,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       },
-      {merge: true}
+      { merge: true }
     );
 
     // Also store by ticker for stock-specific queries
@@ -55,9 +58,9 @@ export async function storeNewsData(newsArticles: any[]): Promise<void> {
         {
           ticker,
           articles: articles.slice(0, 20), // Limit to 20 most recent articles
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         },
-        {merge: true}
+        { merge: true }
       );
     }
 
@@ -84,7 +87,7 @@ export async function storeMarketData(marketData: any[]): Promise<void> {
 
       batch.set(tickerRef, {
         ...stockQuote,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
 
       // Also store in historical collection for time series
@@ -100,7 +103,7 @@ export async function storeMarketData(marketData: any[]): Promise<void> {
     // Create a summary document with all tickers
     const summaryRef = db.collection("marketData").doc("summary");
     batch.set(summaryRef, {
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+      lastUpdated: FieldValue.serverTimestamp(),
       tickers: marketData.map((quote) => ({
         symbol: quote.symbol,
         price: quote.price,
@@ -152,7 +155,7 @@ export async function storeOptionsData(optionsData: any[]): Promise<void> {
       batch.set(tickerRef, {
         symbol: ticker,
         expirationDates: Object.keys(expirations),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
 
       // Store each expiration's options chain
@@ -168,7 +171,7 @@ export async function storeOptionsData(optionsData: any[]): Promise<void> {
           underlying: ticker,
           calls,
           puts,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         });
       }
     }
@@ -228,9 +231,9 @@ export async function updateUserData(
           watchlist,
           watchlistData: marketData,
           relevantNews: allNews.slice(0, 20), // Limit to 20 most recent articles
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         },
-        {merge: true}
+        { merge: true }
       );
 
     logger.info(`Updated user data for user ${userId}`);

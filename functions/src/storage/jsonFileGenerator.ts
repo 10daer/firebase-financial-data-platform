@@ -1,26 +1,28 @@
 import * as admin from "firebase-admin";
-import * as fs from "fs";
-import * as path from "path";
-import {logger} from "../utils/logger";
+import { FieldValue } from "firebase-admin/firestore";
+import { logger } from "../utils/logger";
 
 // Initialize Firebase if not already initialized
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-const storage = admin.storage();
-const bucket = storage.bucket();
+const db = admin.firestore();
+const today = new Date().toISOString().split("T")[0];
 
 /**
- * Generates a static JSON file for news data
+ * Stores news data in Firestore database
  *
  * @param newsArticles Processed news articles to store
  */
 export async function generateNewsJsonFile(newsArticles: any[]): Promise<void> {
   try {
-    // Prepare data for the JSON file
-    const today = new Date().toISOString().split("T")[0];
-    const jsonData = {
+    const batch = db.batch();
+
+    // Create a "news" collection with today's date document
+    const newsRef = db.collection("news").doc(today);
+
+    batch.set(newsRef, {
       generated: new Date().toISOString(),
       date: today,
       articles: newsArticles.map((article) => ({
@@ -32,42 +34,65 @@ export async function generateNewsJsonFile(newsArticles: any[]): Promise<void> {
         sentiment: article.sentimentScore || 0,
         tickers: article.tickers || [],
       })),
-    };
-
-    // Create a temporary local file
-    const tempFilePath = path.join("/tmp", `news-${today}.json`);
-    fs.writeFileSync(tempFilePath, JSON.stringify(jsonData, null, 2));
-
-    // Upload to Firebase Storage
-    await bucket.upload(tempFilePath, {
-      destination: `json/news-${today}.json`,
-      metadata: {
-        contentType: "application/json",
-        cacheControl: "public, max-age=3600", // Cache for 1 hour
-      },
     });
 
-    // Also update the "latest" file for easy access
-    await bucket.upload(tempFilePath, {
-      destination: "json/latest-news.json",
-      metadata: {
-        contentType: "application/json",
-        cacheControl: "public, max-age=1800", // Cache for 30 minutes
-      },
+    // Create a "latest-news" document for easy access
+    const latestNewsRef = db.collection("news").doc("latest");
+    batch.set(latestNewsRef, {
+      generated: new Date().toISOString(),
+      date: today,
+      articles: newsArticles.map((article) => ({
+        title: article.title,
+        description: article.description,
+        source: article.source.name,
+        url: article.url,
+        publishedAt: article.publishedAt,
+        sentiment: article.sentimentScore || 0,
+        tickers: article.tickers || [],
+      })),
     });
 
-    // Clean up temporary file
-    fs.unlinkSync(tempFilePath);
+    // Store articles by ticker for easier access
+    const tickerArticles: Record<string, any[]> = {};
 
-    logger.info(`Generated and uploaded news JSON file for ${today}`);
+    newsArticles.forEach((article) => {
+      if (article.tickers && article.tickers.length > 0) {
+        article.tickers.forEach((ticker: string) => {
+          if (!tickerArticles[ticker]) {
+            tickerArticles[ticker] = [];
+          }
+          tickerArticles[ticker].push(article);
+        });
+      }
+    });
+
+    // Add ticker-specific news documents
+    Object.keys(tickerArticles).forEach((ticker) => {
+      const tickerNewsRef = db.collection("ticker-news").doc(ticker);
+      batch.set(tickerNewsRef, {
+        updated: new Date().toISOString(),
+        ticker: ticker,
+        articles: tickerArticles[ticker].map((article) => ({
+          title: article.title,
+          description: article.description,
+          source: article.source.name,
+          url: article.url,
+          publishedAt: article.publishedAt,
+          sentiment: article.sentimentScore || 0,
+        })),
+      });
+    });
+
+    await batch.commit();
+    logger.info(`Stored news data in Firestore for ${today}`);
   } catch (error) {
-    logger.error("Error generating news JSON file:", error);
+    logger.error("Error storing news in Firestore:", error);
     throw error;
   }
 }
 
 /**
- * Generates a static JSON file for market data
+ * Stores market data in Firestore database
  *
  * @param marketData Processed market data to store
  */
@@ -75,9 +100,12 @@ export async function generateMarketDataJsonFile(
   marketData: any[]
 ): Promise<void> {
   try {
-    // Prepare data for the JSON file
-    const today = new Date().toISOString().split("T")[0];
-    const jsonData = {
+    const batch = db.batch();
+
+    // Create "market-data" collection with today's date document
+    const marketDataRef = db.collection("market-data").doc(today);
+
+    batch.set(marketDataRef, {
       generated: new Date().toISOString(),
       date: today,
       stocks: marketData.map((quote) => ({
@@ -89,42 +117,58 @@ export async function generateMarketDataJsonFile(
         previousClose: quote.previousClose,
         latestTradingDay: quote.latestTradingDay,
       })),
-    };
-
-    // Create a temporary local file
-    const tempFilePath = path.join("/tmp", `market-data-${today}.json`);
-    fs.writeFileSync(tempFilePath, JSON.stringify(jsonData, null, 2));
-
-    // Upload to Firebase Storage
-    await bucket.upload(tempFilePath, {
-      destination: `json/market-data-${today}.json`,
-      metadata: {
-        contentType: "application/json",
-        cacheControl: "public, max-age=3600", // Cache for 1 hour
-      },
     });
 
-    // Also update the "latest" file for easy access
-    await bucket.upload(tempFilePath, {
-      destination: "json/latest-market-data.json",
-      metadata: {
-        contentType: "application/json",
-        cacheControl: "public, max-age=1800", // Cache for 30 minutes
-      },
+    // Create "latest-market-data" document for easy access
+    const latestMarketDataRef = db.collection("market-data").doc("latest");
+    batch.set(latestMarketDataRef, {
+      generated: new Date().toISOString(),
+      date: today,
+      stocks: marketData.map((quote) => ({
+        symbol: quote.symbol,
+        price: quote.price,
+        change: quote.change,
+        changePercent: quote.changePercent,
+        volume: quote.volume,
+        previousClose: quote.previousClose,
+        latestTradingDay: quote.latestTradingDay,
+      })),
     });
 
-    // Clean up temporary file
-    fs.unlinkSync(tempFilePath);
+    // Store individual stock data in separate documents
+    marketData.forEach((quote) => {
+      const stockRef = db.collection("stocks").doc(quote.symbol);
+      batch.set(
+        stockRef,
+        {
+          updated: new Date().toISOString(),
+          symbol: quote.symbol,
+          price: quote.price,
+          change: quote.change,
+          changePercent: quote.changePercent,
+          volume: quote.volume,
+          previousClose: quote.previousClose,
+          latestTradingDay: quote.latestTradingDay,
+          historicalData: FieldValue.arrayUnion({
+            date: today,
+            price: quote.price,
+            volume: quote.volume,
+          }),
+        },
+        { merge: true }
+      );
+    });
 
-    logger.info(`Generated and uploaded market data JSON file for ${today}`);
+    await batch.commit();
+    logger.info(`Stored market data in Firestore for ${today}`);
   } catch (error) {
-    logger.error("Error generating market data JSON file:", error);
+    logger.error("Error storing market data in Firestore:", error);
     throw error;
   }
 }
 
 /**
- * Generates a static JSON file for options data
+ * Stores options data in Firestore database
  *
  * @param optionsData Processed options data to store
  */
@@ -142,9 +186,9 @@ export async function generateOptionsDataJsonFile(
       optionsByTicker[contract.underlying].push(contract);
     });
 
-    // Prepare data for the JSON file
-    const today = new Date().toISOString().split("T")[0];
-    const jsonData = {
+    // Store options summary for all tickers
+    const summaryRef = db.collection("options-summary").doc(today);
+    await summaryRef.set({
       generated: new Date().toISOString(),
       date: today,
       underlyings: Object.keys(optionsByTicker).map((ticker) => ({
@@ -156,31 +200,25 @@ export async function generateOptionsDataJsonFile(
         ],
         contractCount: optionsByTicker[ticker].length,
       })),
-    };
-
-    // Create a temporary local file
-    const tempFilePath = path.join("/tmp", `options-summary-${today}.json`);
-    fs.writeFileSync(tempFilePath, JSON.stringify(jsonData, null, 2));
-
-    // Upload to Firebase Storage
-    await bucket.upload(tempFilePath, {
-      destination: `json/options-summary-${today}.json`,
-      metadata: {
-        contentType: "application/json",
-        cacheControl: "public, max-age=3600", // Cache for 1 hour
-      },
     });
 
-    // Also update the "latest" file for easy access
-    await bucket.upload(tempFilePath, {
-      destination: "json/latest-options-summary.json",
-      metadata: {
-        contentType: "application/json",
-        cacheControl: "public, max-age=1800", // Cache for 30 minutes
-      },
+    // Also store latest options summary
+    const latestSummaryRef = db.collection("options-summary").doc("latest");
+    await latestSummaryRef.set({
+      generated: new Date().toISOString(),
+      date: today,
+      underlyings: Object.keys(optionsByTicker).map((ticker) => ({
+        symbol: ticker,
+        expirations: [
+          ...new Set(
+            optionsByTicker[ticker].map((contract) => contract.expiration)
+          ),
+        ],
+        contractCount: optionsByTicker[ticker].length,
+      })),
     });
 
-    // Generate individual files for each ticker
+    // Store individual ticker option chains
     for (const [ticker, contracts] of Object.entries(optionsByTicker)) {
       // Group by expiration
       const contractsByExpiration: Record<string, any> = {};
@@ -201,7 +239,7 @@ export async function generateOptionsDataJsonFile(
       });
 
       // Sort by strike price
-      Object.values(contractsByExpiration).forEach(({calls, puts}) => {
+      Object.values(contractsByExpiration).forEach(({ calls, puts }) => {
         calls.sort((a: any, b: any) => a.strike - b.strike);
         puts.sort((a: any, b: any) => a.strike - b.strike);
       });
@@ -209,48 +247,28 @@ export async function generateOptionsDataJsonFile(
       const tickerData = {
         symbol: ticker,
         generated: new Date().toISOString(),
+        date: today,
         expirations: contractsByExpiration,
       };
 
-      // Create a temporary file for this ticker
-      const tickerFilePath = path.join(
-        "/tmp",
-        `options-${ticker}-${today}.json`
-      );
-      fs.writeFileSync(tickerFilePath, JSON.stringify(tickerData, null, 2));
+      // Store in Firestore
+      const optionsRef = db.collection("options").doc(ticker);
+      await optionsRef.set(tickerData);
 
-      // Upload to Firebase Storage
-      await bucket.upload(tickerFilePath, {
-        destination: `json/options-${ticker}-${today}.json`,
-        metadata: {
-          contentType: "application/json",
-          cacheControl: "public, max-age=3600", // Cache for 1 hour
-        },
-      });
-
-      // Also update the "latest" file for this ticker
-      await bucket.upload(tickerFilePath, {
-        destination: `json/latest-options-${ticker}.json`,
-        metadata: {
-          contentType: "application/json",
-          cacheControl: "public, max-age=1800", // Cache for 30 minutes
-        },
-      });
-
-      // Clean up temporary file
-      fs.unlinkSync(tickerFilePath);
+      // Also store a record in the historical options collection
+      const historicalRef = db
+        .collection("historical-options")
+        .doc(`${ticker}-${today}`);
+      await historicalRef.set(tickerData);
     }
 
-    // Clean up summary temporary file
-    fs.unlinkSync(tempFilePath);
-
     logger.info(
-      `Generated and uploaded options data JSON files for ${
+      `Stored options data in Firestore for ${
         Object.keys(optionsByTicker).length
       } tickers`
     );
   } catch (error) {
-    logger.error("Error generating options data JSON file:", error);
+    logger.error("Error storing options data in Firestore:", error);
     throw error;
   }
 }

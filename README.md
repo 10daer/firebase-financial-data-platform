@@ -124,6 +124,22 @@ Collection: stocks
 
 ## Results and Benefits
 
+### Visual Results
+
+#### 1. **News Data Stored in Firestore**
+
+![News Data in Firestore](public/image2.png)
+
+The above image showcases how financial news articles are stored in Firestore, including fields like `title`, `url`, `sentiment`, and `timestamp`.
+
+#### 2. **Options Data Stored in Firestore**
+
+![Options Data in Firestore](public/image1.png)
+
+This image demonstrates the storage of options chain data in Firestore, highlighting fields such as `strike price`, `expiration date`, and `volume`.
+
+These screenshots validate the successful implementation of the data storage solution in Firestore.
+
 ### Performance Metrics
 
 - **Data Freshness**:
