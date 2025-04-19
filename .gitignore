@@ -9,13 +9,18 @@ typings/
 node_modules/
 *.local
 
-src/
+src/auth
+src/processing/
+src/storage/
+src/utils/
+src/scheduled/
 
 lib/
 .env
 .runtimeconfig.json
 .firebase/
 *.log
+*.bak
 .firebaserc
 .DS_Store
 yarn-error.log
