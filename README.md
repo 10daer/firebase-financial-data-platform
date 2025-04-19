@@ -30,34 +30,53 @@ This project is a financial data platform built using Firebase and TypeScript. I
 
 ### Optimized Storage Architecture
 
-- **Firestore Database**:
-  - Implements a user and ticker-centric document structure for efficient querying.
-  - Each user or stock ticker has a document containing:
-    - Latest news.
-    - Sentiment scores.
-    - Strategy data (e.g., alerts, signals).
-- **Static JSON Files**:
-  - Generated JSON files hosted on Firebase Hosting or Storage.
-  - These files can be consumed by a frontend (e.g., Webflow).
+After processing, the results are stored in two ways:
 
----
+1. **Firestore Database**:
+
+   - Each user or stock ticker has a document containing:
+     - Latest news.
+     - Sentiment scores.
+     - Strategy data (e.g., alerts, signals).
+   - This option has been implemented as it works seamlessly with Firebase's free tier.
+
+2. **Generated JSON Files**:
+   - Static JSON files can be created and hosted on Firebase Hosting or Storage.
+   - These files are designed to be consumed by a frontend (e.g., Webflow) via fetch requests or CMS data integration.
+   - Note: Firebase Storage requires an upgraded plan for access. A setup file has been included in the repository to assist with configuring Firebase Storage buckets if needed.
 
 ## Database Structure
 
-### Firestore
+### Firestore Database Structure
 
-```plaintext
-Collection: users
-        Document: {userId}
-                - stocks: [ticker1, ticker2, ...]
-                - preferences: {alerts, notifications, etc.}
+#### 🔹 Collection: `options`
 
-Collection: stocks
-        Document: {ticker}
-                - latestNews: [{title, url, sentiment, timestamp}]
-                - sentimentScore: number
-                - strategyData: {alerts, signals}
-```
+- **Document ID**: `AAPL`
+  - **Sub-collection**: `2025-04-19` _(No fields currently)_
+- **Document ID**: `AMZN`
+  - **Sub-collection**: `2025-04-19` _(No fields currently)_
+- **Document ID**: `MSFT`
+  - **Sub-collection**: `2025-04-19` _(No fields currently)_
+- **Document ID**: `SPY`
+  - **Sub-collection**: `2025-04-19` _(No fields currently)_
+- **Document ID**: `TSLA`
+  - **Sub-collection**: `2025-04-19` _(No fields currently)_
+
+---
+
+#### 🔹 Collection: `news`
+
+- **Document ID**: `2025-04-19`
+  - **Field**: `latest`
+  - **Field**: `articles` _(Array of Maps)_
+    - **Item 0**:
+      - `description`: "Vestcor Inc lessened its holding…"
+      - `publishedAt`: `"2025-04-18T11:19:03Z"`
+      - `sentiment`: `0.18867924528301888`
+      - `source`: `"ETF Daily News"`
+      - `tickers`: `[]`
+      - `title`: `"Vestcor Inc Decreases Stock Position i…"`
+      - `url`: `"https://www.etfdailynews.com/2025/04/18/..."`
 
 ---
 
@@ -66,16 +85,28 @@ Collection: stocks
 ```json
 {
   "rules": {
-    "users": {
-      "$userId": {
-        ".read": "auth != null && auth.uid == $userId",
-        ".write": "auth != null && auth.uid == $userId"
-      }
-    },
-    "stocks": {
-      "$ticker": {
-        ".read": "auth != null",
-        ".write": "auth != null && request.auth.token.admin == true"
+    "databases": {
+      "$database": {
+        "documents": {
+          "marketData": {
+            "$document": {
+              ".read": "true",
+              ".write": "false"
+            }
+          },
+          "news": {
+            "$document": {
+              ".read": "true",
+              ".write": "false"
+            }
+          },
+          "tickerNews": {
+            "$document": {
+              ".read": "true",
+              ".write": "false"
+            }
+          }
+        }
       }
     }
   }
@@ -128,13 +159,13 @@ Collection: stocks
 
 #### 1. **News Data Stored in Firestore**
 
-![News Data in Firestore](public/image2.png)
+![News Data in Firestore](public/image1.png)
 
 The above image showcases how financial news articles are stored in Firestore, including fields like `title`, `url`, `sentiment`, and `timestamp`.
 
 #### 2. **Options Data Stored in Firestore**
 
-![Options Data in Firestore](public/image1.png)
+![Options Data in Firestore](public/image2.png)
 
 This image demonstrates the storage of options chain data in Firestore, highlighting fields such as `strike price`, `expiration date`, and `volume`.
 
